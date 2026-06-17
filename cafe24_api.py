@@ -134,7 +134,7 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
     start_date / end_date : "YYYY-MM-DD"
     필요 권한 스코프: mall.read_order
     """
-    raw = _cafe24_get("/orders", params={
+    raw = _cafe24_get("/admin/orders", params={
         "start_date": start_date,
         "end_date":   end_date,
     })
