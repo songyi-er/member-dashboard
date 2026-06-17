@@ -61,11 +61,15 @@ def _handle_oauth_callback():
         st.session_state["token_expires_at"] = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
         st.session_state["oauth_code_used"] = code
         st.session_state["token_ready"]     = True
+        st.session_state["_data_mode"]      = "🔗 카페24 API 연동"
         st.query_params.clear()
     except Exception as e:
         st.session_state["oauth_error"] = str(e)
 
 _handle_oauth_callback()
+
+if st.session_state.get("token_ready"):
+    st.session_state["_data_mode"] = "🔗 카페24 API 연동"
 
 # ─────────────────────────────────────────
 # 0. 페이지 설정
@@ -269,11 +273,16 @@ def kpi_card(label, value, delta_html_str="", accent="#4F6AF6"):
 with st.sidebar:
     st.markdown("## 👶 회원지표 대시보드")
     st.markdown("---")
+    _mode_options = ["🎲 가상 데이터 (데모)", "📂 CSV 파일 업로드", "🔗 카페24 API 연동"]
+    _default_mode = st.session_state.get("_data_mode", "🎲 가상 데이터 (데모)")
+    _default_idx  = _mode_options.index(_default_mode) if _default_mode in _mode_options else 0
     data_mode = st.radio(
         "데이터 소스",
-        ["🎲 가상 데이터 (데모)", "📂 CSV 파일 업로드", "🔗 카페24 API 연동"],
-        index=0,
+        _mode_options,
+        index=_default_idx,
+        key="data_mode_radio",
     )
+    st.session_state["_data_mode"] = data_mode
     st.markdown("---")
 
     if data_mode == "📂 CSV 파일 업로드":
