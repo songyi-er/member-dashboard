@@ -18,8 +18,54 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 import io
+import requests
 import warnings
 warnings.filterwarnings("ignore")
+
+# ─────────────────────────────────────────
+# OAuth 콜백 자동 처리
+# 카페24 인증 후 ?code=XXX 로 돌아오면
+# 자동으로 액세스 토큰 발급 & 세션 저장
+# ─────────────────────────────────────────
+def _handle_oauth_callback():
+    params = st.query_params
+    code = params.get("code", None)
+    if not code:
+        return
+    if st.session_state.get("oauth_code_used") == code:
+        return
+    required = ["CAFE24_MALL_ID","CAFE24_CLIENT_ID","CAFE24_CLIENT_SECRET","CAFE24_REDIRECT_URI"]
+    if not all(k in st.secrets for k in required):
+        return
+    try:
+        mall_id       = st.secrets["CAFE24_MALL_ID"]
+        client_id     = st.secrets["CAFE24_CLIENT_ID"]
+        client_secret = st.secrets["CAFE24_CLIENT_SECRET"]
+        redirect_uri  = st.secrets["CAFE24_REDIRECT_URI"]
+        resp = requests.post(
+            f"https://{mall_id}.cafe24api.com/api/v2/oauth/token",
+            data={
+                "grant_type":   "authorization_code",
+                "code":         code,
+                "redirect_uri": redirect_uri,
+                "client_id":    client_id,
+                "client_secret": client_secret,
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        token_data = resp.json()
+        st.session_state["access_token"]    = token_data.get("access_token", "")
+        st.session_state["refresh_token"]   = token_data.get("refresh_token", "")
+        expires_in = token_data.get("expires_in", 7200)
+        st.session_state["token_expires_at"] = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
+        st.session_state["oauth_code_used"] = code
+        st.session_state["token_ready"]     = True
+        st.query_params.clear()
+    except Exception as e:
+        st.session_state["oauth_error"] = str(e)
+
+_handle_oauth_callback()
 
 # ─────────────────────────────────────────
 # 0. 페이지 설정
@@ -255,15 +301,40 @@ with st.sidebar:
             # 토큰 발급 여부 확인
             token_ok = "CAFE24_ACCESS_TOKEN" in st.secrets and st.secrets["CAFE24_ACCESS_TOKEN"] != ""
 
-            if not token_ok:
+            session_token_ok = bool(st.session_state.get("token_ready"))
+
+            if st.session_state.get("oauth_error"):
+                st.error("인증 오류: " + st.session_state.pop("oauth_error"))
+
+            if not token_ok and not session_token_ok:
                 st.warning("카페24 인증이 필요해요.")
                 try:
                     from cafe24_api import get_auth_url
                     auth_url = get_auth_url()
-                    st.markdown(f"[🔐 카페24 인증하기]({auth_url})", unsafe_allow_html=False)
-                    st.caption("버튼 클릭 → 쇼핑몰 관리자 로그인 → 완료")
+                    st.markdown(f"[🔐 카페24 인증하기]({auth_url})")
+                    st.caption("버튼 클릭 → 쇼핑몰 관리자 로그인 → 자동 완료!")
                 except Exception as e:
                     st.error(f"인증 URL 생성 실패: {e}")
+
+            elif session_token_ok and not token_ok:
+                st.success("✅ 인증 완료! 데이터를 불러올 수 있어요.")
+                st.info("아래 값을 Streamlit Secrets에 추가하면 재시작 후에도 유지돼요.")
+                at = st.session_state.get("access_token", "")
+                rt = st.session_state.get("refresh_token", "")
+                ex = st.session_state.get("token_expires_at", "")
+                secrets_text = (
+                    'CAFE24_ACCESS_TOKEN = "' + at + '"\n' +
+                    'CAFE24_REFRESH_TOKEN = "' + rt + '"\n' +
+                    'CAFE24_TOKEN_EXPIRES_AT = "' + ex + '"'
+                )
+                st.code(secrets_text)
+                start_date = st.date_input("시작일", value=datetime.now() - timedelta(days=90))
+                end_date   = st.date_input("종료일", value=datetime.now())
+                if st.button("🔄 데이터 새로고침", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
+                st.session_state["api_start"] = str(start_date)
+                st.session_state["api_end"]   = str(end_date)
             else:
                 # 조회 기간 설정
                 st.markdown("**조회 기간**")
