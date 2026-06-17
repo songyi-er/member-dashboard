@@ -105,7 +105,6 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
     raw = _cafe24_get("/orders", params={
         "start_date": start_date,
         "end_date":   end_date,
-        "order_status": "paid",          # 결제완료 기준
     })
     if not raw:
         return pd.DataFrame()
@@ -113,14 +112,15 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
     rows = []
     for o in raw:
         member_type = "비회원" if o.get("member_type") == "guest" else "회원"
+        grade_raw = o.get("member_grade_name", "FAMILY") if member_type == "회원" else "-"
         rows.append({
             "order_id":        o.get("order_id"),
             "order_date":      pd.to_datetime(o.get("order_date")),
             "member_type":     member_type,
-            "grade":           o.get("member_grade_name", "-") if member_type == "회원" else "-",
+            "grade":           grade_raw if member_type == "회원" else "-",
             "member_id":       o.get("member_id", "GUEST"),
-            "payment_amount":  int(float(o.get("actual_price", 0))),
-            "used_point":      int(float(o.get("use_point", 0))),
+            "payment_amount":  int(float(o.get("actual_price", 0) or 0)),
+            "used_point":      int(float(o.get("use_point", 0) or 0)),
         })
     return pd.DataFrame(rows)
 
