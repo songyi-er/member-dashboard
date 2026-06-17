@@ -225,7 +225,7 @@ with st.sidebar:
     st.markdown("---")
     data_mode = st.radio(
         "데이터 소스",
-        ["🎲 가상 데이터 (데모)", "📂 CSV 파일 업로드"],
+        ["🎲 가상 데이터 (데모)", "📂 CSV 파일 업로드", "🔗 카페24 API 연동"],
         index=0,
     )
     st.markdown("---")
@@ -236,6 +236,47 @@ with st.sidebar:
         up_members = st.file_uploader("② 회원 데이터 (members.csv)", type="csv")
         up_kpi     = st.file_uploader("③ 주간 KPI (weekly_kpi.csv)", type="csv")
         st.caption("컬럼 형식은 하단 '컬럼 가이드' 참조")
+
+    elif data_mode == "🔗 카페24 API 연동":
+        up_orders = up_members = up_kpi = None
+        st.markdown("**카페24 API 연동**")
+
+        # Secrets 설정 여부 확인
+        secrets_ok = all(k in st.secrets for k in [
+            "CAFE24_MALL_ID", "CAFE24_CLIENT_ID", "CAFE24_CLIENT_SECRET"
+        ])
+
+        if not secrets_ok:
+            st.error("⚠️ Streamlit Secrets 설정이 필요해요!\n\nStreamlit Cloud → 앱 Settings → Secrets에 카페24 키를 입력해주세요.")
+        else:
+            mall_id = st.secrets["CAFE24_MALL_ID"]
+            st.success(f"✅ 쇼핑몰 연결됨: {mall_id}")
+
+            # 토큰 발급 여부 확인
+            token_ok = "CAFE24_ACCESS_TOKEN" in st.secrets and st.secrets["CAFE24_ACCESS_TOKEN"] != ""
+
+            if not token_ok:
+                st.warning("카페24 인증이 필요해요.")
+                try:
+                    from cafe24_api import get_auth_url
+                    auth_url = get_auth_url()
+                    st.markdown(f"[🔐 카페24 인증하기]({auth_url})", unsafe_allow_html=False)
+                    st.caption("버튼 클릭 → 쇼핑몰 관리자 로그인 → 완료")
+                except Exception as e:
+                    st.error(f"인증 URL 생성 실패: {e}")
+            else:
+                # 조회 기간 설정
+                st.markdown("**조회 기간**")
+                start_date = st.date_input("시작일", value=datetime.now() - timedelta(days=90))
+                end_date   = st.date_input("종료일", value=datetime.now())
+
+                if st.button("🔄 데이터 새로고침", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
+
+                st.session_state["api_start"] = str(start_date)
+                st.session_state["api_end"]   = str(end_date)
+
     else:
         up_orders = up_members = up_kpi = None
 
@@ -265,6 +306,29 @@ if data_mode == "📂 CSV 파일 업로드" and up_orders and up_members and up_
             df_members[col] = pd.to_datetime(df_members[col])
     df_kpi["week_start"] = pd.to_datetime(df_kpi["week_start"])
     st.sidebar.success("✅ CSV 로딩 완료")
+
+elif data_mode == "🔗 카페24 API 연동" and "CAFE24_ACCESS_TOKEN" in st.secrets and st.secrets["CAFE24_ACCESS_TOKEN"] != "":
+    try:
+        from cafe24_api import fetch_orders, fetch_members, build_weekly_kpi, build_weekly_new_members
+        start = st.session_state.get("api_start", str(datetime.now() - timedelta(days=90)))
+        end   = st.session_state.get("api_end",   str(datetime.now()))
+        with st.spinner("카페24에서 데이터 불러오는 중..."):
+            df_orders  = fetch_orders(start, end)
+            df_members = fetch_members()
+            df_kpi     = build_weekly_kpi(df_orders)
+            new_mem_weekly = build_weekly_new_members(df_members)
+            if not df_kpi.empty and not new_mem_weekly.empty:
+                df_kpi = df_kpi.merge(new_mem_weekly, on="week_start", how="left", suffixes=("","_m"))
+                if "new_members_m" in df_kpi.columns:
+                    df_kpi["new_members"] = df_kpi["new_members_m"].fillna(0).astype(int)
+                    df_kpi.drop(columns=["new_members_m"], inplace=True)
+        st.sidebar.success("✅ 카페24 실데이터 연동 완료!")
+    except Exception as e:
+        st.sidebar.error(f"API 오류: {e}")
+        df_orders  = generate_orders()
+        df_members = generate_members()
+        df_kpi     = generate_weekly_kpi()
+
 else:
     df_orders  = generate_orders()
     df_members = generate_members()
