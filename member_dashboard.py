@@ -148,8 +148,8 @@ st.markdown("""
 # ─────────────────────────────────────────
 # 1. 가상 데이터 생성 함수들
 # ─────────────────────────────────────────
-GRADE_ORDER  = ["일반", "실버", "골드", "VIP", "VVIP"]
-GRADE_COLORS = {"일반": "#A9B4D6", "실버": "#7EC8E3", "골드": "#FCD34D", "VIP": "#F97316", "VVIP": "#A855F7"}
+GRADE_ORDER  = ["FAMILY", "SILVER", "GOLD", "VIP", "VVIP"]
+GRADE_COLORS = {"FAMILY": "#A9B4D6", "SILVER": "#7EC8E3", "GOLD": "#FCD34D", "VIP": "#F97316", "VVIP": "#A855F7"}
 
 @st.cache_data
 def generate_orders(n=5000, seed=42):
