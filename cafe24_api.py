@@ -47,27 +47,33 @@ def refresh_access_token(mall_id: str, client_id: str, client_secret: str, refre
 
 
 def get_valid_token() -> str:
-    """
-    세션에 저장된 토큰 반환. 만료 시 자동 갱신.
-    st.secrets에 다음 값 필요:
-        CAFE24_MALL_ID, CAFE24_CLIENT_ID, CAFE24_CLIENT_SECRET,
-        CAFE24_ACCESS_TOKEN, CAFE24_REFRESH_TOKEN, CAFE24_TOKEN_EXPIRES_AT
-    """
-    expires_at = st.session_state.get(
-        "token_expires_at",
-        datetime.fromisoformat(st.secrets.get("CAFE24_TOKEN_EXPIRES_AT", "2000-01-01"))
-    )
-    if datetime.utcnow() >= expires_at - timedelta(minutes=5):
-        token_data = refresh_access_token(
-            st.secrets["CAFE24_MALL_ID"],
-            st.secrets["CAFE24_CLIENT_ID"],
-            st.secrets["CAFE24_CLIENT_SECRET"],
-            st.session_state.get("refresh_token", st.secrets["CAFE24_REFRESH_TOKEN"]),
-        )
-        st.session_state["access_token"]    = token_data["access_token"]
-        st.session_state["refresh_token"]   = token_data["refresh_token"]
-        st.session_state["token_expires_at"] = datetime.utcnow() + timedelta(seconds=token_data["expires_in"])
-    return st.session_state.get("access_token", st.secrets["CAFE24_ACCESS_TOKEN"])
+    """토큰 반환. 만료 10분 전 자동 갱신."""
+    try:
+        expires_str = str(st.session_state.get(
+            "token_expires_at",
+            st.secrets.get("CAFE24_TOKEN_EXPIRES_AT", "2099-12-31T00:00:00")
+        )).replace(".000", "")
+        expires_at = datetime.fromisoformat(expires_str)
+        # KST 기준이면 UTC로 변환
+        expires_at_utc = expires_at - timedelta(hours=9)
+    except Exception:
+        expires_at_utc = datetime.utcnow() + timedelta(hours=2)
+
+    if datetime.utcnow() >= expires_at_utc - timedelta(minutes=10):
+        try:
+            token_data = refresh_access_token(
+                st.secrets["CAFE24_MALL_ID"],
+                st.secrets["CAFE24_CLIENT_ID"],
+                st.secrets["CAFE24_CLIENT_SECRET"],
+                st.session_state.get("refresh_token", st.secrets.get("CAFE24_REFRESH_TOKEN", "")),
+            )
+            st.session_state["access_token"]     = token_data["access_token"]
+            st.session_state["refresh_token"]    = token_data["refresh_token"]
+            st.session_state["token_expires_at"] = datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 7200))
+        except Exception:
+            pass
+
+    return st.session_state.get("access_token", st.secrets.get("CAFE24_ACCESS_TOKEN", ""))
 
 
 # ─────────────────────────────────────────
