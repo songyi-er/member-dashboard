@@ -96,7 +96,7 @@ def _cafe24_get(endpoint: str, params: dict = None) -> list:
     headers  = {
         "Authorization": f"Bearer {get_valid_token()}",
         "Content-Type":  "application/json",
-        "X-Cafe24-Api-Version": "2024-06-01",
+        "X-Cafe24-Api-Version": "2026-03-01",
     }
     params = params or {}
     params.setdefault("limit", 100)
