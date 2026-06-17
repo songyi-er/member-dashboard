@@ -47,8 +47,40 @@ def refresh_access_token(mall_id: str, client_id: str, client_secret: str, refre
 
 
 def get_valid_token() -> str:
-    """Secrets에서 토큰 직접 반환 (갱신 없음)."""
-    return st.session_state.get("access_token", st.secrets.get("CAFE24_ACCESS_TOKEN", ""))
+    """액세스 토큰 반환. 만료 시 리프레시 토큰으로 자동 갱신."""
+    # 세션에 토큰 없으면 Secrets에서 초기화
+    if "access_token" not in st.session_state:
+        st.session_state["access_token"]  = st.secrets.get("CAFE24_ACCESS_TOKEN", "")
+        st.session_state["refresh_token"] = st.secrets.get("CAFE24_REFRESH_TOKEN", "")
+
+    # 리프레시 토큰으로 새 액세스 토큰 발급 시도
+    try:
+        mall_id       = st.secrets["CAFE24_MALL_ID"]
+        client_id     = st.secrets["CAFE24_CLIENT_ID"]
+        client_secret = st.secrets["CAFE24_CLIENT_SECRET"]
+        refresh_token = st.session_state.get("refresh_token", st.secrets.get("CAFE24_REFRESH_TOKEN", ""))
+
+        import base64 as _b64
+        pair    = f"{client_id}:{client_secret}".encode()
+        b64auth = _b64.b64encode(pair).decode()
+
+        resp = requests.post(
+            f"https://{mall_id}.cafe24api.com/api/v2/oauth/token",
+            headers={
+                "Authorization": f"Basic {b64auth}",
+                "Content-Type":  "application/x-www-form-urlencoded",
+            },
+            data=f"grant_type=refresh_token&refresh_token={refresh_token}",
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            token_data = resp.json()
+            st.session_state["access_token"]  = token_data.get("access_token", st.session_state["access_token"])
+            st.session_state["refresh_token"] = token_data.get("refresh_token", refresh_token)
+    except Exception:
+        pass
+
+    return st.session_state.get("access_token", "")
 
 
 # ─────────────────────────────────────────
@@ -112,15 +144,22 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
     rows = []
     for o in raw:
         member_type = "비회원" if o.get("member_type") == "guest" else "회원"
-        grade_raw = o.get("member_grade_name", "FAMILY") if member_type == "회원" else "-"
+        # 카페24 API 등급 필드명 여러 경우 시도
+        grade_raw = (
+            o.get("member_grade_name") or
+            o.get("group_no_default") or
+            o.get("member_group_no") or
+            "FAMILY"
+        ) if member_type == "회원" else "-"
         rows.append({
             "order_id":        o.get("order_id"),
             "order_date":      pd.to_datetime(o.get("order_date")),
             "member_type":     member_type,
-            "grade":           grade_raw if member_type == "회원" else "-",
+            "grade":           str(grade_raw) if member_type == "회원" else "-",
             "member_id":       o.get("member_id", "GUEST"),
             "payment_amount":  int(float(o.get("actual_price", 0) or 0)),
             "used_point":      int(float(o.get("use_point", 0) or 0)),
+            "_raw_keys":       list(o.keys()),  # 디버깅용
         })
     return pd.DataFrame(rows)
 
@@ -140,11 +179,16 @@ def fetch_members() -> pd.DataFrame:
 
     rows = []
     for m in raw:
+        grade_m = (
+            m.get("member_grade_name") or
+            m.get("group_no_default") or
+            "FAMILY"
+        )
         rows.append({
             "member_id":       m.get("member_id"),
             "join_date":       pd.to_datetime(m.get("created_date")),
-            "grade":           m.get("member_grade_name", "일반"),
-            "prev_grade":      m.get("member_grade_name", "일반"),   # 전환 이력은 별도 API
+            "grade":           str(grade_m),
+            "prev_grade":      str(grade_m),   # 전환 이력은 별도 API
             "point_balance":   int(float(m.get("available_mileage", 0))),
             "last_order_date": pd.to_datetime(m.get("last_login_date")),  # 주문일 대체
             "total_orders":    int(m.get("order_count", 0)),
