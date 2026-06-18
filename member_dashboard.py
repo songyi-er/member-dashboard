@@ -768,7 +768,7 @@ with tab3:
     # ── 미사용 포인트 보유자 분석 ────────────
     st.markdown('<div class="section-header">😴 1,000원 이상 포인트 보유 & 1년 미구매 회원</div>', unsafe_allow_html=True)
 
-    cutoff = datetime.now() - timedelta(days=365)
+    cutoff = pd.Timestamp(datetime.now() - timedelta(days=365), tz=df_members["last_order_date"].dt.tz)
     sleepers = df_members[
         (df_members["point_balance"] >= 1000) &
         (df_members["last_order_date"] <= cutoff)
