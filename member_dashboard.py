@@ -685,9 +685,10 @@ with tab2:
     # ── 재구매 주기 & 빈도 ─────────────────
     st.markdown('<div class="section-header">🔁 등급별 재구매 주기 & 빈도</div>', unsafe_allow_html=True)
     repurchase = df_members.copy()
+    ref_date = pd.Timestamp("2024-12-31", tz=repurchase["join_date"].dt.tz)
     repurchase["avg_days_between_orders"] = np.where(
         repurchase["total_orders"] > 1,
-        (datetime(2024,12,31) - repurchase["join_date"]).dt.days / repurchase["total_orders"].replace(0, np.nan),
+        (ref_date - repurchase["join_date"]).dt.days / repurchase["total_orders"].replace(0, np.nan),
         np.nan
     )
     rep_summary = repurchase.groupby("grade").agg(
