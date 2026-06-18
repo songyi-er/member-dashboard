@@ -42,8 +42,41 @@ def refresh_access_token(mall_id: str, client_id: str, client_secret: str, refre
 
 
 def get_valid_token() -> str:
-    """Secrets에서 액세스 토큰 직접 반환."""
-    return st.secrets.get("CAFE24_ACCESS_TOKEN", "")
+    """
+    유효한 액세스 토큰 반환.
+    session_state에 갱신된 토큰이 있으면 우선 사용.
+    """
+    return st.session_state.get("auto_access_token") or st.secrets.get("CAFE24_ACCESS_TOKEN", "")
+
+
+def _try_refresh_token() -> bool:
+    """리프레시 토큰으로 액세스 토큰 자동 갱신. 성공 시 True 반환."""
+    try:
+        mall_id       = st.secrets.get("CAFE24_MALL_ID", "")
+        client_id     = st.secrets.get("CAFE24_CLIENT_ID", "")
+        client_secret = st.secrets.get("CAFE24_CLIENT_SECRET", "")
+        refresh_token = st.secrets.get("CAFE24_REFRESH_TOKEN", "")
+        if not refresh_token:
+            return False
+        resp = requests.post(
+            f"https://{mall_id}.cafe24api.com/api/v2/oauth/token",
+            data={
+                "grant_type":    "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id":     client_id,
+                "client_secret": client_secret,
+            },
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            new_token = data.get("access_token", "")
+            if new_token:
+                st.session_state["auto_access_token"] = new_token
+                return True
+    except Exception:
+        pass
+    return False
 
 
 # ─────────────────────────────────────────
@@ -71,6 +104,15 @@ def _cafe24_get(endpoint: str, params: dict = None) -> list:
     while True:
         params["offset"] = offset
         resp = requests.get(f"{base_url}{endpoint}", headers=headers, params=params, timeout=15)
+
+        # 401이면 리프레시 토큰으로 자동 갱신 후 재시도
+        if resp.status_code == 401:
+            if _try_refresh_token():
+                headers["Authorization"] = f"Bearer {get_valid_token()}"
+                resp = requests.get(f"{base_url}{endpoint}", headers=headers, params=params, timeout=15)
+            else:
+                resp.raise_for_status()
+
         resp.raise_for_status()
         data = resp.json()
 
