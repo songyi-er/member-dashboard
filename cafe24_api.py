@@ -16,11 +16,6 @@ import time
 # 카페24 OAuth 2.0 토큰 발급
 # ─────────────────────────────────────────
 def get_access_token(mall_id: str, client_id: str, client_secret: str, code: str) -> dict:
-    """
-    인증 코드(code)로 액세스 토큰 발급
-    - 카페24 개발자센터 앱 등록 후 발급받은 client_id / client_secret 사용
-    - Redirect URI 에서 code 파라미터 추출 후 이 함수에 전달
-    """
     url = f"https://{mall_id}.cafe24api.com/api/v2/oauth/token"
     resp = requests.post(url, data={
         "grant_type":    "authorization_code",
@@ -58,6 +53,7 @@ def _cafe24_get(endpoint: str, params: dict = None) -> list:
     """
     카페24 REST API GET 요청 래퍼.
     limit/offset 페이지네이션을 자동으로 순회해 전체 데이터 반환.
+    카페24 API offset 최대값(10,000) 초과 시 자동 종료.
     """
     mall_id = st.secrets["CAFE24_MALL_ID"]
     base_url = f"https://{mall_id}.cafe24api.com/api/v2"
@@ -68,6 +64,8 @@ def _cafe24_get(endpoint: str, params: dict = None) -> list:
     }
     params = params or {}
     params.setdefault("limit", 100)
+
+    MAX_OFFSET = 10000  # 카페24 API offset 최대값 (초과 시 422 오류)
 
     all_items, offset = [], 0
     while True:
@@ -87,6 +85,11 @@ def _cafe24_get(endpoint: str, params: dict = None) -> list:
         if len(batch) < params["limit"]:
             break
         offset += params["limit"]
+
+        # offset 최대값 초과 시 종료 (카페24 422 오류 방지)
+        if offset >= MAX_OFFSET:
+            break
+
         time.sleep(0.2)   # API 레이트 리밋 대비
 
     return all_items
@@ -112,7 +115,6 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
     rows = []
     for o in raw:
         member_type = "비회원" if o.get("member_type") == "guest" else "회원"
-        # 등급번호 → 등급명 매핑 (카페24 group_no_when_ordering 기준)
         grade_no_map = {
             "1": "FAMILY",
             "2": "VVIP",
@@ -123,9 +125,7 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
         grade_no  = str(o.get("group_no_when_ordering", "1") or "1")
         grade_raw = grade_no_map.get(grade_no, "FAMILY") if member_type == "회원" else "-"
 
-        # 결제금액: payment_amount 필드 사용
         pay_amt = o.get("payment_amount") or o.get("actual_price") or 0
-        # 포인트 사용: points_spent_amount 필드 사용
         pt_amt  = o.get("points_spent_amount") or o.get("use_point") or 0
 
         rows.append({
@@ -164,9 +164,9 @@ def fetch_members() -> pd.DataFrame:
             "member_id":       m.get("member_id"),
             "join_date":       pd.to_datetime(m.get("created_date")),
             "grade":           str(grade_m),
-            "prev_grade":      str(grade_m),   # 전환 이력은 별도 API
+            "prev_grade":      str(grade_m),
             "point_balance":   int(float(m.get("available_mileage", 0))),
-            "last_order_date": pd.to_datetime(m.get("last_login_date")),  # 주문일 대체
+            "last_order_date": pd.to_datetime(m.get("last_login_date")),
             "total_orders":    int(m.get("order_count", 0)),
             "total_payment":   int(float(m.get("total_order_amount", 0))),
         })
@@ -177,10 +177,6 @@ def fetch_members() -> pd.DataFrame:
 # 주간 KPI 집계 (주문 DF에서 계산)
 # ─────────────────────────────────────────
 def build_weekly_kpi(df_orders: pd.DataFrame) -> pd.DataFrame:
-    """
-    fetch_orders() 결과로 weekly_kpi 테이블 생성
-    (카페24 통계 API 대신 클라이언트 사이드 집계)
-    """
     if df_orders.empty:
         return pd.DataFrame()
 
@@ -196,7 +192,6 @@ def build_weekly_kpi(df_orders: pd.DataFrame) -> pd.DataFrame:
                                if (g["member_type"]=="회원").any() else 0,
     })).reset_index()
 
-    # 신규 가입자는 members 데이터 필요 → 여기선 0으로 채움 (별도 merge)
     weekly["new_members"] = 0
     return weekly
 
