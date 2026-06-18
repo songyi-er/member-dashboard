@@ -687,7 +687,7 @@ with tab2:
     repurchase = df_members.copy()
     repurchase["avg_days_between_orders"] = np.where(
         repurchase["total_orders"] > 1,
-        (datetime(2024,12,31) - repurchase["join_date"]).dt.days / repurchase["total_orders"],
+        (datetime(2024,12,31) - repurchase["join_date"]).dt.days / repurchase["total_orders"].replace(0, np.nan),
         np.nan
     )
     rep_summary = repurchase.groupby("grade").agg(
