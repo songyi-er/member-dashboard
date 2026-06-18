@@ -802,7 +802,7 @@ with tab3:
     with s3:
         st.markdown(kpi_card(
             "평균 미활동 기간",
-            f"{int(sleepers['dormant_days'].mean())}일",
+            f"{int(sleepers['dormant_days'].mean()) if len(sleepers) > 0 else 0}일",
             "",
             "#A9B4D6"
         ), unsafe_allow_html=True)
