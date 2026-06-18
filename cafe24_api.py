@@ -47,40 +47,8 @@ def refresh_access_token(mall_id: str, client_id: str, client_secret: str, refre
 
 
 def get_valid_token() -> str:
-    """액세스 토큰 반환. 만료 시 리프레시 토큰으로 자동 갱신."""
-    # 세션에 토큰 없으면 Secrets에서 초기화
-    if "access_token" not in st.session_state:
-        st.session_state["access_token"]  = st.secrets.get("CAFE24_ACCESS_TOKEN", "")
-        st.session_state["refresh_token"] = st.secrets.get("CAFE24_REFRESH_TOKEN", "")
-
-    # 리프레시 토큰으로 새 액세스 토큰 발급 시도
-    try:
-        mall_id       = st.secrets["CAFE24_MALL_ID"]
-        client_id     = st.secrets["CAFE24_CLIENT_ID"]
-        client_secret = st.secrets["CAFE24_CLIENT_SECRET"]
-        refresh_token = st.session_state.get("refresh_token", st.secrets.get("CAFE24_REFRESH_TOKEN", ""))
-
-        import base64 as _b64
-        pair    = f"{client_id}:{client_secret}".encode()
-        b64auth = _b64.b64encode(pair).decode()
-
-        resp = requests.post(
-            f"https://{mall_id}.cafe24api.com/api/v2/oauth/token",
-            headers={
-                "Authorization": f"Basic {b64auth}",
-                "Content-Type":  "application/x-www-form-urlencoded",
-            },
-            data=f"grant_type=refresh_token&refresh_token={refresh_token}",
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            token_data = resp.json()
-            st.session_state["access_token"]  = token_data.get("access_token", st.session_state["access_token"])
-            st.session_state["refresh_token"] = token_data.get("refresh_token", refresh_token)
-    except Exception:
-        pass
-
-    return st.session_state.get("access_token", "")
+    """Secrets에서 액세스 토큰 직접 반환."""
+    return st.secrets.get("CAFE24_ACCESS_TOKEN", "")
 
 
 # ─────────────────────────────────────────
