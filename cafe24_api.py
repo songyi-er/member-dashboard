@@ -143,41 +143,31 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
 # ─────────────────────────────────────────
 # 회원 데이터 fetch
 # ─────────────────────────────────────────
-@st.cache_data(ttl=3600, show_spinner="카페24 회원 데이터 불러오는 중...")
-def fetch_members() -> pd.DataFrame:
+@st.cache_data(ttl=3600, show_spinner="카페24 회원 데이터 집계 중...")
+def fetch_members(df_orders: pd.DataFrame = None) -> pd.DataFrame:
     """
-    전체 회원 목록 조회 → members.csv 와 동일한 컬럼 구조로 반환
-    필요 권한 스코프: mall.read_customer
+    주문 데이터에서 회원 정보를 집계하여 members.csv 구조로 반환.
+    카페24 회원 목록 API 접근이 제한되어 주문 기반으로 대체.
     """
-    # 카페24 /admin/customers는 가입일 범위가 필수
-    from datetime import datetime
-    end = datetime.now().strftime("%Y-%m-%d")
-    start = (datetime.now() - timedelta(days=365*5)).strftime("%Y-%m-%d")  # 최근 5년
-    raw = _cafe24_get("/admin/customers", params={
-        "created_start_date": start,
-        "created_end_date": end,
-    })
-    if not raw:
+    if df_orders is None or df_orders.empty:
         return pd.DataFrame()
 
-    rows = []
-    for m in raw:
-        grade_m = (
-            m.get("member_grade_name") or
-            m.get("group_no_default") or
-            "FAMILY"
-        )
-        rows.append({
-            "member_id":       m.get("member_id"),
-            "join_date":       pd.to_datetime(m.get("created_date")),
-            "grade":           str(grade_m),
-            "prev_grade":      str(grade_m),
-            "point_balance":   int(float(m.get("available_mileage", 0))),
-            "last_order_date": pd.to_datetime(m.get("last_login_date")),
-            "total_orders":    int(m.get("order_count", 0)),
-            "total_payment":   int(float(m.get("total_order_amount", 0))),
-        })
-    return pd.DataFrame(rows)
+    mem = df_orders[df_orders["member_type"] == "회원"].copy()
+    if mem.empty:
+        return pd.DataFrame()
+
+    agg = mem.groupby("member_id").agg(
+        join_date=("order_date", "min"),
+        last_order_date=("order_date", "max"),
+        total_orders=("order_id", "count"),
+        total_payment=("payment_amount", "sum"),
+        grade=("grade", "last"),
+    ).reset_index()
+
+    agg["prev_grade"] = agg["grade"]
+    agg["point_balance"] = 0
+
+    return agg
 
 
 # ─────────────────────────────────────────
