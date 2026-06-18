@@ -144,22 +144,30 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
     rows = []
     for o in raw:
         member_type = "비회원" if o.get("member_type") == "guest" else "회원"
-        # 카페24 API 등급 필드명 여러 경우 시도
-        grade_raw = (
-            o.get("member_grade_name") or
-            o.get("group_no_default") or
-            o.get("member_group_no") or
-            "FAMILY"
-        ) if member_type == "회원" else "-"
+        # 등급번호 → 등급명 매핑 (카페24 group_no_when_ordering 기준)
+        grade_no_map = {
+            "1": "FAMILY",
+            "2": "VVIP",
+            "3": "VIP",
+            "4": "GOLD",
+            "5": "SILVER",
+        }
+        grade_no  = str(o.get("group_no_when_ordering", "1") or "1")
+        grade_raw = grade_no_map.get(grade_no, "FAMILY") if member_type == "회원" else "-"
+
+        # 결제금액: payment_amount 필드 사용
+        pay_amt = o.get("payment_amount") or o.get("actual_price") or 0
+        # 포인트 사용: points_spent_amount 필드 사용
+        pt_amt  = o.get("points_spent_amount") or o.get("use_point") or 0
+
         rows.append({
-            "order_id":        o.get("order_id"),
-            "order_date":      pd.to_datetime(o.get("order_date")),
-            "member_type":     member_type,
-            "grade":           str(grade_raw) if member_type == "회원" else "-",
-            "member_id":       o.get("member_id", "GUEST"),
-            "payment_amount":  int(float(o.get("actual_price", 0) or 0)),
-            "used_point":      int(float(o.get("use_point", 0) or 0)),
-            "_raw_keys":       list(o.keys()),  # 디버깅용
+            "order_id":       o.get("order_id"),
+            "order_date":     pd.to_datetime(o.get("order_date")),
+            "member_type":    member_type,
+            "grade":          grade_raw,
+            "member_id":      o.get("member_id", "GUEST"),
+            "payment_amount": int(float(str(pay_amt).replace(",","") or 0)),
+            "used_point":     int(float(str(pt_amt).replace(",","") or 0)),
         })
     return pd.DataFrame(rows)
 
