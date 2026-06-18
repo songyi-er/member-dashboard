@@ -149,7 +149,14 @@ def fetch_members() -> pd.DataFrame:
     전체 회원 목록 조회 → members.csv 와 동일한 컬럼 구조로 반환
     필요 권한 스코프: mall.read_customer
     """
-    raw = _cafe24_get("/admin/customers", params={})
+    # 카페24 /admin/customers는 가입일 범위가 필수
+    from datetime import datetime
+    end = datetime.now().strftime("%Y-%m-%d")
+    start = (datetime.now() - timedelta(days=365*5)).strftime("%Y-%m-%d")  # 최근 5년
+    raw = _cafe24_get("/admin/customers", params={
+        "created_start_date": start,
+        "created_end_date": end,
+    })
     if not raw:
         return pd.DataFrame()
 
