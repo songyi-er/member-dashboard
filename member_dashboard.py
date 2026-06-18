@@ -768,12 +768,14 @@ with tab3:
     # ── 미사용 포인트 보유자 분석 ────────────
     st.markdown('<div class="section-header">😴 1,000원 이상 포인트 보유 & 1년 미구매 회원</div>', unsafe_allow_html=True)
 
-    cutoff = pd.Timestamp(datetime.now() - timedelta(days=365), tz=df_members["last_order_date"].dt.tz)
+    _tz = df_members["last_order_date"].dt.tz
+    _now = pd.Timestamp(datetime.now(), tz=_tz)
+    cutoff = _now - timedelta(days=365)
     sleepers = df_members[
         (df_members["point_balance"] >= 1000) &
         (df_members["last_order_date"] <= cutoff)
     ].copy()
-    sleepers["dormant_days"] = (datetime.now() - sleepers["last_order_date"]).dt.days
+    sleepers["dormant_days"] = (_now - sleepers["last_order_date"]).dt.days
     sleepers_by_grade = sleepers.groupby("grade").agg(
         count=("member_id","count"),
         avg_point=("point_balance","mean"),
