@@ -394,7 +394,7 @@ elif data_mode == "🔗 카페24 API 연동" and "CAFE24_ACCESS_TOKEN" in st.sec
         end   = st.session_state.get("api_end",   str(datetime.now()))
         with st.spinner("카페24에서 데이터 불러오는 중..."):
             df_orders  = fetch_orders(start, end)
-            df_members = fetch_members()
+            df_members = fetch_members(df_orders)
             df_kpi     = build_weekly_kpi(df_orders)
             new_mem_weekly = build_weekly_new_members(df_members)
             if not df_kpi.empty and not new_mem_weekly.empty:
