@@ -149,7 +149,7 @@ def fetch_members() -> pd.DataFrame:
     전체 회원 목록 조회 → members.csv 와 동일한 컬럼 구조로 반환
     필요 권한 스코프: mall.read_customer
     """
-    raw = _cafe24_get("/admin/customers", params={"member_type": "member"})
+    raw = _cafe24_get("/admin/customers", params={})
     if not raw:
         return pd.DataFrame()
 
