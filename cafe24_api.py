@@ -172,7 +172,7 @@ def fetch_orders(start_date: str, end_date: str) -> pd.DataFrame:
 
         rows.append({
             "order_id":       o.get("order_id"),
-            "order_date":     pd.to_datetime(o.get("order_date")),
+            "order_date":     pd.to_datetime(o.get("order_date")).tz_localize(None) if pd.to_datetime(o.get("order_date")).tzinfo is None else pd.to_datetime(o.get("order_date")).tz_convert(None),
             "member_type":    member_type,
             "grade":          grade_raw,
             "member_id":      o.get("member_id", "GUEST"),
